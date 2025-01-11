@@ -1,38 +1,23 @@
-import org.antlr.v4.runtime.tree.TerminalNode;
-import org.antlr.v4.runtime.tree.Tree;
+package ast
 
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.stream.IntStream;
+import org.antlr.v4.runtime.tree.TerminalNode
+import org.antlr.v4.runtime.tree.Tree
 
-public class ParseTreeSourcifier implements Sourcifier<Tree>
+class ParseTreeSourcifier:Sourcifier<Tree>
 {
-	@Override
-	public String sourcify(Tree tree)
-	{
-		return sourcify(tree,new StringBuilder());
-	}
+	override fun sourcify(tree:Tree?):String?=sourcify(tree,StringBuilder())
 
-	@Override
-	public List<String> sourcify(List<Tree> trees)
-	{
-		return trees.stream().map(this::sourcify).toList();
-	}
+	override fun sourcify(trees:List<Tree?>):(List<String?>)=trees.map(::sourcify)
 
-	@Override
-	public String sourcify(Tree tree,StringBuilder builder)
+	override fun sourcify(tree:Tree?,builder:StringBuilder):String?
 	{
-		if(tree==null) return "";
-		int childCount=tree.getChildCount();
-		Consumer<Tree> childToSource=child->
-		{
-			if(child instanceof TerminalNode parserRuleContext)
-				builder.append(parserRuleContext).append(" ");
-			sourcify(child,builder);
-		};
-		IntStream.range(0,childCount)
-		         .mapToObj(tree::getChild)
-		         .forEach(childToSource);
+		if(tree==null) return null
+		val childCount=tree.childCount;
+		(0..<childCount).map(tree::getChild).forEach {
+			if(it is TerminalNode)
+				builder.append(it).append(" ")
+			sourcify(it,builder)
+		}
 		return builder.toString().trim().replace("<EOF>","");
 	}
 }

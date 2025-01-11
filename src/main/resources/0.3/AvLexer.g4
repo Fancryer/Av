@@ -37,10 +37,10 @@ Backtick: '`';
 
 Comma: ',';
 Colon: ':';
-Semicolon: ';';
-Bind: ':=';
-BindProp: '::=';
+BindTemporary: ':=';
+BindPersistent: '::=';
 BindBorrow: '`:=';
+BindBorrowPersistent: '`::=';
 Dollar: '$';
 
 Match: '`match';
