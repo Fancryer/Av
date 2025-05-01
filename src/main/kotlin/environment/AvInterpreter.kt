@@ -15,14 +15,24 @@ import ast.AvString.Companion.av
 import ast.AvStringLike.Companion.extract
 import ast.EBorrow.*
 import environment.AvPrinter.Companion.stringify
+import java.math.BigInteger
+import java.math.MathContext
+import kotlin.streams.asSequence
 
 private val String.text:AvText get()=AvText(this)
 
 class AvInterpreter
 {
-	val AvChunk.eval:AvChunk get()=AvChunk(map.eval)
+	val AvChunk.eval:AvChunk get()=AvChunk(inner.eval)
 
-	private val AvMap.eval:AvMap get()=eval(GlobalScope)
+	val AvChunkInner.eval
+		get()=
+			when(this)
+			{
+				is AvMap->eval(GlobalScope)
+				is AvExp->eval(GlobalScope)
+			}
+	val AvMap.eval:AvMap get()=eval(GlobalScope)
 
 	infix fun AvMap.eval(scope:Scope):AvMap
 	{
@@ -84,8 +94,9 @@ class AvInterpreter
 		val newList=mutableListOf<AvListEntry>()
 		val avList=AvList(newList,scope)
 
-		entries.asSequence()
+		entries.parallelStream()
 			.map {it eval avList}
+			.asSequence()
 			.forEach {
 				if(it is AvExp) newList+=it
 				else if(it is AvDeclEntry)
@@ -150,12 +161,7 @@ class AvInterpreter
 					else->stringify(exp)
 				}
 			}
-		}.av.also {
-			println("In: $this")
-			println("Out: $it")
-			val isId=Regex("[a-zA-Z_0-9+/%|&^<=>*!?\u0391-\u03A9\u03B1-\u03C9-]+").matches(it.text)
-			if(isId) println("\tAnd also: ${AvId(it.text)}")
-		}
+		}.av
 
 	infix fun AvStringContent.eval(scope:Scope):AvText=
 		when(this)
@@ -306,18 +312,18 @@ class AvInterpreter
 				l is AvInt->when(r)
 				{
 					is AvInt->(l.value+r.value).av               // int
-					is AvFloat->(l.value+r.value).av             // float
+					is AvFloat->(l.value.toBigDecimal()+r.value).av             // float
 					is AvStringLike->"${l.value}${r.extract}".av // string
-					is AvBool->(l.value+r.asInt).av              // int
+					is AvBool->("${l.value}".toBigInteger()+r.asInt.toBigInteger()).av              // int
 					else->l
 				}
 
 				l is AvFloat->when(r)
 				{
-					is AvInt->(l.value+r.value).av               // float
+					is AvInt->(l.value+r.value.toBigDecimal()).av               // float
 					is AvFloat->(l.value+r.value).av             // float
 					is AvStringLike->"${l.value}${r.extract}".av // string
-					is AvBool->(l.value+r.asInt).av              // float
+					is AvBool->(l.value+r.asInt.toBigDecimal(MathContext.UNLIMITED)).av              // float
 					else->l
 				}
 
@@ -332,8 +338,10 @@ class AvInterpreter
 
 				l is AvBool->when(r)
 				{
-					is AvInt->(l.asInt+r.value).av       // string
-					is AvFloat->(l.asInt+r.value).av     // string
+					is AvInt->(l.asInt.toBigInteger()+"${r.value}".toBigInteger()).av       // string
+					is AvFloat->("${l.value}".toBigDecimal(MathContext.UNLIMITED)+"${r.value}".toBigDecimal(
+						MathContext.UNLIMITED
+					)).av     // string
 					is AvStringLike->"$l${r.extract}".av // string
 					is AvBool->l nor r                   // string
 					else->l
@@ -376,23 +384,23 @@ class AvInterpreter
 				l is AvInt->when(r)
 				{
 					is AvInt->(l.value-r.value).av   // int
-					is AvFloat->(l.value-r.value).av // float
-					is AvBool->(l.value-r.asInt).av  // int
+					is AvFloat->(l.value.toBigDecimal()-r.value).av // float
+					is AvBool->(l.value-r.asInt.toBigInteger()).av  // int
 					else->l
 				}
 
 				l is AvFloat->when(r)
 				{
-					is AvInt->(l.value-r.value).av   // float
+					is AvInt->(l.value-r.value.toBigDecimal()).av   // float
 					is AvFloat->(l.value-r.value).av // float
-					is AvBool->(l.value-r.asInt).av  // float
+					is AvBool->(l.value-r.asInt.toBigDecimal()).av  // float
 					else->l
 				}
 
 				l is AvBool->when(r)
 				{
-					is AvInt->(l.asInt-r.value).av   // int
-					is AvFloat->(l.asInt-r.value).av // float
+					is AvInt->(l.asInt.toBigInteger()-r.value).av   // int
+					is AvFloat->(l.asInt.toBigDecimal()-r.value).av // float
 					is AvBool->l nand r              // bool
 					else->l
 				}

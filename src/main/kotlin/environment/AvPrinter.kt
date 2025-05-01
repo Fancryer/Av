@@ -4,6 +4,7 @@ import ast.*
 import environment.CompressionType.*
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.KClass
+import kotlin.streams.asSequence
 
 enum class CompressionType
 {
@@ -65,38 +66,7 @@ class AvPrinter
 			node.run {
 				return@run when(this)
 				{
-					is AvChunk->
-						map.run {
-							when(compressionType)
-							{
-								Uncompressed->stringify(this,compressionType)
-								Compact->entries.joinToString(" ") {stringify(it,compressionType)}
-								Minified->
-								{
-									var lastEntry:AvMapEntry?=null
-									val builder=StringBuilder()
-									for((i:Int,e:AvMapEntry) in entries.withIndex())
-									{
-										if(i==0)
-										{
-											lastEntry=e
-											builder.append(stringify(lastEntry as AvMapEntry,compressionType))
-										}
-										else
-										{
-											builder.append(stringify(lastEntry!!,compressionType))
-											if(!(lastEntry as AvMapEntry).omits(e))
-												builder.append(' ').also {
-													println("${lastEntry!!::class} !omits ${e::class}")
-												}
-											builder.append(stringify(e,compressionType))
-											lastEntry=e
-										}
-									}
-									builder.toString()
-								}
-							}
-						}
+					is AvChunk->stringify(inner,compressionType)
 
 					is AvVarExp->"'"+stringify(name,compressionType)
 					is AvRefExp->"${stringify(exp,compressionType)}.${stringify(atom,compressionType)}"
@@ -104,18 +74,22 @@ class AvPrinter
 						"${stringify(left)} ${stringify(borrow,compressionType)} ${stringify(right,compressionType)}"
 
 					is AvBytes->
-						ints.joinToString(" ","(",")") {
-							stringify(it,compressionType)
-						}
+						ints.parallelStream()
+							.map {stringify(it,compressionType)}
+							.asSequence()
+							.joinToString(" ","(",")")
 
 					is AvDecimal->"$value"
-					is AvHexInt->value.toHexString()
+					is AvHexInt->value.toString(16)
 					is AvFloat->"$value"
 					is AvTrue->"true"
 					is AvFalse->"false"
 					is AvNil->"null"
 					is AvString->
-						contents.joinToString("","\"","\"") {stringify(it,compressionType)}
+						contents.parallelStream()
+							.map {stringify(it,compressionType)}
+							.asSequence()
+							.joinToString("","\"","\"")
 
 					is AvText->value
 					is AvConstantString->
@@ -132,13 +106,15 @@ class AvPrinter
 					{
 						when(compressionType)
 						{
-							Uncompressed->entries.joinToString(", ","[","]") {
-								stringify(it,compressionType)
-							}
+							Uncompressed->entries.parallelStream()
+								.map {stringify(it,compressionType)}
+								.asSequence()
+								.joinToString(", ","[","]")
 
-							Compact->entries.joinToString(" ") {
-								stringify(it,compressionType)
-							}
+							Compact->entries.parallelStream()
+								.map {stringify(it,compressionType)}
+								.asSequence()
+								.joinToString(" ")
 
 							Minified->
 							{
@@ -149,12 +125,12 @@ class AvPrinter
 									if(i==0)
 									{
 										lastEntry=e
-										builder.append(stringify(lastEntry as AvListEntry,compressionType))
+										builder.append(stringify(lastEntry,compressionType))
 									}
 									else
 									{
 										builder.append(stringify(lastEntry!!,compressionType))
-										if(!(lastEntry as AvListEntry).omits(e))
+										if(!lastEntry.omits(e))
 											builder.append(' ').also {
 												println("${lastEntry!!::class} !omits ${e::class}")
 											}
@@ -165,18 +141,24 @@ class AvPrinter
 								builder.toString()
 							}
 						}
-						entries.joinToString(
-							if(compressionType.isSet) " " else ", ",
-							"[",
-							"]"
-						) {stringify(it,compressionType)}
+						entries.parallelStream()
+							.map {stringify(it,compressionType)}
+							.asSequence()
+							.joinToString(
+								if(compressionType.isSet) " " else ", ",
+								"[",
+								"]"
+							)
 					}
 
-					is AvMap->entries.joinToString(
-						if(compressionType.isSet) " " else ", ",
-						"{",
-						"}"
-					) {stringify(it,compressionType)}
+					is AvMap->entries.parallelStream()
+						.map {stringify(it,compressionType)}
+						.asSequence()
+						.joinToString(
+							if(compressionType.isSet) " " else ", ",
+							"{",
+							"}"
+						)
 
 					is AvDeclEntry->
 						"${stringify(name,compressionType)} $bind ${stringify(value,compressionType)}"

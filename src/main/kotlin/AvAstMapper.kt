@@ -1,4 +1,6 @@
 import ast.*
+import ast.AvFloat.Companion.av
+import ast.AvInt.Companion.av
 import ast.EBind.Persistent
 import ast.EBind.Temporary
 import ast.EBorrow.Default
@@ -11,6 +13,7 @@ import ast.EBorrow.Unite
 import org.antlr.v4.runtime.tree.TerminalNode
 import org.fancryer.gen.AvParser.*
 import org.fancryer.gen.AvParserBaseVisitor
+import kotlin.streams.asSequence
 
 class AvAstMapper:AvParserBaseVisitor<AvNode>()
 {
@@ -27,7 +30,7 @@ class AvAstMapper:AvParserBaseVisitor<AvNode>()
 			is Borrow_expContext->visitBorrow_exp(ctx)
 			is Var_expContext->visitVar_exp(ctx.Id(),ctx.string())
 			is Map_expContext->visitMap_exp(ctx)
-			else->error("Unreachable")
+			else->error("Unreachable exp of class ${ctx::class}")
 		}
 
 	override fun visitBytes_exp(ctx:Bytes_expContext):AvBytes=visitBytes(ctx.bytes())
@@ -48,7 +51,7 @@ class AvAstMapper:AvParserBaseVisitor<AvNode>()
 		ctx.run {
 			//atom: int | Float | string | True | False | Nil | Id;
 			int_()?.let(::visitInt)
-			?: Float()?.let {AvFloat(it.text.toFloat())}
+			?: Float()?.text?.toBigDecimal()?.av
 			?: string()?.let(::visitString)?.let {
 				if(it.contents.size==1)
 				{
@@ -72,7 +75,7 @@ class AvAstMapper:AvParserBaseVisitor<AvNode>()
 
 	override fun visitChunk(ctx:ChunkContext):AvChunk=
 		AvChunk(
-			ctx.map()?.let(::visitMap)
+			ctx.exp()?.let(::visitExp)
 			?: ctx.map_entries()?.let(::visitMap_entries)
 			?: AvMap()
 		)
@@ -109,11 +112,21 @@ class AvAstMapper:AvParserBaseVisitor<AvNode>()
 		visitList_entries(ctx.list_entries())
 
 	override fun visitList_entries(ctx:List_entriesContext?):AvList=
-		AvList(ctx?.list_entry()?.map(::visitList_entry) ?: emptyList())
+		ctx?.list_entry()
+			?.parallelStream()
+			?.map(::visitList_entry)
+			?.asSequence()
+			.orEmpty()
+			.let(::AvList)
 
 
 	override fun visitMap_entries(ctx:Map_entriesContext?):AvMap=
-		AvMap(ctx?.map_entry()?.map(::visitMap_entry) ?: emptyList())
+		ctx?.map_entry()
+			?.parallelStream()
+			?.map(::visitMap_entry)
+			?.asSequence()
+			.orEmpty()
+			.let(::AvMap)
 
 	override fun visitMap(ctx:MapContext):AvMap=
 		visitMap_entries(ctx.map_entries())
@@ -129,23 +142,29 @@ class AvAstMapper:AvParserBaseVisitor<AvNode>()
 		)
 
 	override fun visitBytes(ctx:BytesContext):AvBytes=
-		ctx.HexInt().map(::getHexInt).let(::AvBytes)
+		ctx.HexInt()
+			.parallelStream()
+			.map(::getHexInt)
+			.asSequence()
+			.let(::AvBytes)
 
 	override fun visitInt(ctx:IntContext):AvInt=
 		ctx.Int()?.let(::getInt)
 		?: getHexInt(ctx.HexInt())
 
 	fun getInt(i:TerminalNode):AvDecimal=
-		AvDecimal(i.text.toInt())
+		i.text.toBigInteger().av
 
 	fun getHexInt(i:TerminalNode):AvHexInt=
-		AvHexInt(i.text.drop(1).toInt(16))
+		AvHexInt(i.text.drop(1).toInt(16).toBigInteger())
 
-	override fun visitString(ctx:StringContext):AvString
-	{
-		val contents=ctx.string_content().map(::visitString_content)
-		return AvString(contents)
-	}
+	override fun visitString(ctx:StringContext):AvString=
+		ctx.string_content()
+			?.parallelStream()
+			?.map(::visitString_content)
+			?.asSequence()
+			.orEmpty()
+			.let(::AvString)
 
 	override fun visitString_content(ctx:String_contentContext):AvStringContent=
 		ctx.exp()?.let(::visitExp)

@@ -5,16 +5,20 @@ import ast.AvString.Companion.av
 import ast.AvStringLike.Companion.extract
 import environment.AvPrinter
 import environment.AvPrinter.Companion.stringify
+import java.math.BigDecimal
+import java.math.BigInteger
 import java.util.*
 
 interface AvNode
 
-data class AvChunk(val map:AvMap=AvMap()):AvNode
+data class AvChunk(val inner:AvChunkInner=AvMap()):AvNode
 {
-	override fun toString():String="(AvChunk $map)"
+	override fun toString():String="(AvChunk $inner)"
 }
 
-sealed interface AvExp:AvListEntry,AvStringContent
+sealed interface AvChunkInner:AvNode
+
+sealed interface AvExp:AvListEntry,AvStringContent,AvChunkInner
 {
 	val props:MutableMap<AvAtom,AvExp>
 
@@ -93,7 +97,7 @@ class AvList(
 				else if(prop in props) props[prop]!!
 				else error("Unexpected property: $prop")
 
-			is AvDecimal->getPlainEntries()[prop.value]
+			is AvDecimal->getPlainEntries()[prop.value as Int]
 
 			else->if(prop in props) props[prop]!!
 			else error("Unexpected property: $prop")
@@ -106,42 +110,47 @@ sealed interface AvListEntry:AvNode
 
 data class AvBytes(val ints:(List<AvHexInt>)=emptyList()):AvAtom
 {
+	constructor(ints:Sequence<AvHexInt>):this(ints.toList())
+	constructor(ints:Iterable<AvHexInt>):this(ints.toList())
+
 	override val props:(MutableMap<AvAtom,AvExp>)=mutableMapOf()
 }
 
 sealed class AvInt:AvAtom
 {
-	abstract val value:Int
+	abstract val value:BigInteger
 
 	companion object
 	{
-		val Int.av get()=AvDecimal(this)
+		val Int.av get()=AvDecimal(toBigInteger())
+		val BigInteger.av get()=AvDecimal(this)
 	}
 }
 
-data class AvDecimal(override val value:Int):AvInt()
+class AvDecimal(override val value:BigInteger):AvInt()
 {
 	override val props:(MutableMap<AvAtom,AvExp>)=mutableMapOf()
 	override fun toString():String="(AvDecimal $value)"
 }
 
-data class AvHexInt(override val value:Int):AvInt()
+data class AvHexInt(override val value:BigInteger):AvInt()
 {
 	override val props:(MutableMap<AvAtom,AvExp>)=mutableMapOf()
 
 	@OptIn(ExperimentalStdlibApi::class)
-	override fun toString():String="(AvHexInt ${value.toHexString()})"
+	override fun toString():String="(AvHexInt ${value.toInt().toHexString()})"
 }
 
 
-data class AvFloat(val value:Float):AvAtom
+class AvFloat(val value:BigDecimal):AvAtom
 {
 	override val props:(MutableMap<AvAtom,AvExp>)=mutableMapOf()
 	override fun toString():String="(AvFloat $value)"
 
 	companion object
 	{
-		val Float.av:AvFloat get()=AvFloat(this)
+		val Float.av:AvFloat get()=AvFloat(toBigDecimal())
+		val BigDecimal.av get()=AvFloat(this)
 	}
 }
 
@@ -215,7 +224,7 @@ data class AvConstantString(val text:String):AvStringLike
 {
 	override val props:MutableMap<AvAtom,AvExp>
 		get()=mutableMapOf(
-			"length".av to AvDecimal(text.length),
+			"length".av to text.length.av,
 			"chars".av to text.toList()
 				.map {"$it"}
 				.map {it.av}
@@ -232,10 +241,11 @@ data class AvString(val contents:(List<AvStringContent>)=emptyList()):AvStringLi
 	constructor(string:String):this(string.av)
 	constructor(string:AvConstantString):this(AvText(string.text))
 	constructor(string:AvString):this(string.contents)
+	constructor(contents:Sequence<AvStringContent>):this(contents.toList())
 
 	override val props:(MutableMap<AvAtom,AvExp>)
 		get()=mutableMapOf(
-			"length".av to AvDecimal(join.length),
+			"length".av to join.length.av,
 			"chars".av to join.toList()
 				.map {"$it"}
 				.map {it.av}
@@ -419,37 +429,7 @@ sealed class Scope(val parent:Scope?=GlobalScope)
 {
 	val bindings=mutableMapOf<String,AvExp>()
 
-	operator fun get(name:String):AvExp?
-	{
-		/*println(
-			"Getting $name, me: ${
-				when(val s=this)
-				{
-					is AvList->stringify(s)
-					is AvMap->stringify(s)
-					GlobalScope->"GlobalScope"
-				}
-			}, my bindings: ${
-				stringify(bindings.map {AvPlainMapEntry(it.key.av,it.value)}
-					.let(::AvMap))
-			}"
-		)
-		val doIHaveIt=name in bindings
-		println("Key: $name, do I have it: $doIHaveIt")
-		if(!doIHaveIt)
-			println("Okay, manually looking").also {
-				bindings.forEach {(k,v)->
-					println("Key $k")
-					println("\tValue ${stringify(v)}")
-					println("\t\tEvaluatedKey $name,")
-					println("\t\t\tis this our key: ${k==name}")
-				}
-			}
-		else
-			println("I found it")*/
-		return bindings[name] //trying to get in local scope
-			   ?: parent?.get(name) //otherwise trying to get in parent
-	}
+	operator fun get(name:String):AvExp?=bindings[name] ?: parent?.get(name)
 
 	operator fun set(name:String,value:AvExp)
 	{

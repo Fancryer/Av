@@ -15,17 +15,17 @@ borrow:
 	| Differ
 	| Either
 	| Push
-	| '`' Id '`'
+	| '`' Id
   ;
 
 exp:
-	exp '.' atom        #ref_exp
+	exp '.' atom          #ref_exp
 	| atom                #atom_exp
 	| list                #list_exp
 	| map                 #map_exp
 	| bytes               #bytes_exp
 	| '\'' (Id | string)  #var_exp
-	| exp '$' exp           #call_exp
+	| exp '$' exp         #call_exp
 	| exp borrow exp      #borrow_exp
 	| lambda              #lambda_exp
 	| '`(' exp ')`'       #paren_exp
@@ -44,7 +44,7 @@ map: '{' map_entries? '}';
 
 map_entry: plain_map_entry | decl_entry | borrow_decl_entry;
 
-borrow_decl_entry: Id ('`:=' | '`::=') exp;
+borrow_decl_entry: Id '`:=' exp;
 
 plain_map_entry: atom ':'? exp;
 decl_entry: (Id | string) (':=' | '::=') exp #exp_decl;

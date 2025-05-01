@@ -16,15 +16,13 @@ class AvFormatter:AutoCloseable
 
 	fun append(char:Char)=append("$char")
 
+	@OptIn(ExperimentalStdlibApi::class)
 	fun format(node:AvNode):String
 	{
 		node.run {
 			when(this)
 			{
-				is AvChunk->map.entries.forEach {
-					format(it)
-					append('\n')
-				}
+				is AvChunk->format(inner)
 
 				is AvVarExp->
 				{
@@ -48,13 +46,16 @@ class AvFormatter:AutoCloseable
 					format(right)
 				}
 
-				is AvBytes->TODO(builder.toString()) //ints.joinToString(" ","(",")") {format(it)}
+				is AvBytes->ints.joinToString(" ","(",")") {format(it)}.let(::append)
 				is AvDecimal->append("$value")
-				is AvHexInt->TODO(builder.toString()) //value.toHexString()
-				is AvFloat->TODO(builder.toString()) //"$value"
-				is AvTrue->builder.append(true) //TODO(builder.toString()) //"true"
-				is AvFalse->builder.append(false) //TODO(builder.toString()) //"false"
-				is AvNil->TODO(builder.toString()) //"null"
+				is AvHexInt->append(value.toInt().toHexString())
+				is AvFloat->append("$value") //"$value"
+				is AvTrue->builder.append(true)
+				is AvFalse->builder.append(false)
+				is AvNil->
+				{
+					builder.append("null")
+				} //"null"
 				is AvString->
 				{
 					append('"')
@@ -63,6 +64,7 @@ class AvFormatter:AutoCloseable
 					}
 					builder.append('"')
 				}
+
 				is AvText->builder.append(value)
 				is AvConstantString->append("\"${text}\"")
 				is AvId->append(value)

@@ -6,7 +6,7 @@ options
 }
 
 //ommitable
-chunk: (map | map_entries)? EOF;
+chunk: (exp | map_entries)? EOF;
 
 borrow:
 	Overlay

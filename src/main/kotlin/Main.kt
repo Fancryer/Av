@@ -1,15 +1,16 @@
 import ast.AvChunk
 import ast.AvMap
 import ast.AvString.Companion.av
-import environment.AvFormatter
-import environment.AvInterpreter
-import environment.AvPrinter
+import environment.*
 import environment.AvPrinter.Companion.stringify
-import environment.CompressionType
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
+import org.antlr.v4.runtime.Token
+import org.antlr.v4.runtime.TokenStream
+import org.antlr.v4.runtime.UnbufferedTokenStream
 import org.fancryer.gen.AvLexer
 import org.fancryer.gen.AvParser
+import java.io.File
 import kotlin.time.Duration
 import kotlin.time.measureTime
 
@@ -22,7 +23,7 @@ fun main()
 	}
 	println((helloWorldMap["hello"] as? AvMap)?.get("world"))
 
-	val shouldPrintSexp=false
+	val shouldPrintSexp=true
 
 	val lexer:AvLexer
 	val parser:AvParser
@@ -32,14 +33,16 @@ fun main()
 	val mappingTime:Duration
 	val evaluationTime:Duration
 
+	val fileName="src/main/resources/gaming.json" //"src/main/resources/composer-lock.json"
+
 	measureTime {
-		lexer=AvLexer(CharStreams.fromFileName("src/main/resources/composer-lock.json")) //step4.av"))
-		parser=AvParser(CommonTokenStream(lexer))
+		lexer=AvLexer(CharStreams.fromFileName(fileName)) //step4.av"))
+//		parser=AvParser(CommonTokenStream(lexer))
+		parser=AvParser(UnbufferedTokenStream<Token>(lexer))
 		chunk=parser.chunk()
 	}.also {
 		println("[[Av original string tree]]: \n")
-
-		println("${chunk.toStringTree(parser)}\n\n")
+//		println("$stringTree\n\n")
 		parsingTime=it
 	}
 
@@ -48,12 +51,12 @@ fun main()
 		mappedChunk=AvAstMapper().visitChunk(chunk)
 	}.also {
 		println("[[Av mapped]]: \n")
-		println(stringify(mappedChunk))
+//		println(stringify(mappedChunk))
 
 		if(shouldPrintSexp)
 		{
 			println("[[Sexp mapped]]: \n")
-			println("${mappedChunk}\n\n")
+//			println("${mappedChunk}\n\n")
 		}
 		mappingTime=it
 	}
@@ -65,40 +68,97 @@ fun main()
 		}
 	}.also {
 		println("[[Av evaluated]]: \n")
-		println(stringify(evaluatedChunk,CompressionType.Minified)
-			.also {println("Evaluated with length: ${it.length}")})
-		println()
-
-		if(shouldPrintSexp)
-		{
-			println("[[Sexp evaluated]]: \n")
-			println("${evaluatedChunk}\n\n")
-		}
+		File("$fileName.fmt").writeText(
+			AvPrinter().run {
+				stringify(evaluatedChunk)
+			}
+		)
 		evaluationTime=it
 	}
 
-	val formattedChunk:String
-	val formatTime:Duration
-
-
-	measureTime {
-		AvFormatter().use {
-			formattedChunk=it.format(evaluatedChunk)
-		}
-	}.also {
-		println("[[Av formatted]]: \n")
-		//		println(formattedChunk)
-
-		formatTime=it
-	}
-
-	val totalTime=parsingTime+mappingTime+evaluationTime+formatTime
+	val totalTime=parsingTime+mappingTime+evaluationTime
 
 	println("Parsing time: $parsingTime | Parsing percent: ${parsingTime/totalTime*100}%")
 	println("Mapping time: $mappingTime | Mapping percent: ${mappingTime/totalTime*100}%")
+	println("ParseMapping time: ${parsingTime+mappingTime} | ParseMapping percent: ${(parsingTime+mappingTime)/totalTime*100}%")
 	println("Evaluation time: $evaluationTime | Evaluation percent: ${evaluationTime/totalTime*100}%\n")
-	println("Format time: $formatTime | Formatted percent: ${formatTime/totalTime*100}%")
 	println("Total time: $totalTime")
+
+//	map {
+//		"user" map {
+//			"id" entry 12345.av
+//			"name" entry "Alice".av
+//			"email" entry "alice@example.com".av
+//			"age" entry 21.av
+//			"preferences" map {
+//				"theme" entry "dark".av
+//				"language" entry "ru".av
+//				"notifications" map {
+//					"email" entry true.av
+//					"push" entry false.av
+//				}
+//			}
+//		}
+//		"history" list {
+//			+map {
+//				"date" entry "2025-03-02".av
+//				"action" entry "login".av
+//			}
+//			+map {
+//				"date" entry "2025-03-01".av
+//				"action" entry "update_settings".av
+//			}
+//		}
+//	}.also {
+//		AvFormatter().use {formatter->
+//			println("MAP: $it")
+//			println("FORMATTED: ${formatter.format(it)}")
+//		}
+//	}
+//
+//	val point=map {
+//		"x" entry 1.0f.av
+//		"y" entry 2.0f.av
+//	}
+//	val serializedPoint:AvNode
+//	measureTime {
+//		serializedPoint=AvSerializer().serialize(point)
+//	}.also {
+//		println("Serialization time: $it")
+//	}
+//	AvFormatter().use {formatter->
+//		println("POINT: ${formatter.format(serializedPoint)}")
+//	}
+
+	/*
+	{
+	  "user": {
+		"id": 12345,
+		"name": "Alice",
+		"email": "alice@example.com",
+		"age": 21,
+		"preferences": {
+		  "theme": "dark",
+		  "language": "ru",
+		  "notifications": {
+			"email": true,
+			"push": false
+		  }
+		}
+	  },
+	  "history": [
+		{
+		  "date": "2025-03-02",
+		  "action": "login"
+		},
+		{
+		  "date": "2025-03-01",
+		  "action": "update_settings"
+		}
+	  ]
+	}
+
+	*/
 }
 
 fun <Match,Result> matchNotNull(default:Result,vararg cases:Pair<Match?,Result>):Result

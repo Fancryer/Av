@@ -40,7 +40,6 @@ Colon: ':';
 BindTemporary: ':=';
 BindPersistent: '::=';
 BindBorrow: '`:=';
-BindBorrowPersistent: '`::=';
 Dollar: '$';
 
 Match: '`match';
